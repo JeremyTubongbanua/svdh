@@ -64,7 +64,7 @@ def get_meal_data(period_id, date_str):
         print("Error parsing JSON response")
         return None
 
-def get_menu(meal_name, date_str):
+def get_menu(meal_name, date_str, more=False):
     meal_name = meal_name.lower()
     data = get_initial_data(date_str)
     if data is None:
@@ -94,7 +94,8 @@ def get_menu(meal_name, date_str):
 
     menu_lines = []
     for category in categories:
-        if category['name'] in BRUH_CATEGORIES:
+        # Check if "more" is False and the category is in BRUH_CATEGORIES
+        if not more and category['name'] in BRUH_CATEGORIES:
             continue
         category_name = CATEGORY_ALIASES.get(category['name'], category['name'])
         menu_lines.append(f"**{category_name}**")
@@ -102,6 +103,7 @@ def get_menu(meal_name, date_str):
             menu_lines.append(f"- {item['name']}")
         menu_lines.append('')
     return '\n'.join(menu_lines)
+
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -143,7 +145,7 @@ async def on_ready():
     await tree.sync()
 
 @tree.command(name="menu", description="Get the dining hall menu")
-async def menu(interaction: discord.Interaction, meal: str = None, date_input: str = None):
+async def menu(interaction: discord.Interaction, meal: str = None, date_input: str = None, more: bool = False):
     eastern = pytz.timezone('US/Eastern')
     now = datetime.datetime.now(eastern)
 
@@ -179,14 +181,14 @@ async def menu(interaction: discord.Interaction, meal: str = None, date_input: s
     if not meal:
         meals = ['breakfast', 'lunch', 'dinner']
         for m in meals:
-            menu = get_menu(m, date_str)
+            menu = get_menu(m, date_str, more)
             if menu:
                 embed = discord.Embed(title=f"{m.capitalize()} Menu for {date_str}", description=menu, color=0x1D82B6)
                 response_messages.append(embed)
             else:
                 response_messages.append(f"No menu available for {m} on {date_str}")
     else:
-        menu = get_menu(meal, date_str)
+        menu = get_menu(meal, date_str, more)
         if menu:
             embed = discord.Embed(title=f"{meal.capitalize()} Menu for {date_str}", description=menu, color=0x1D82B6)
             response_messages.append(embed)
@@ -198,5 +200,6 @@ async def menu(interaction: discord.Interaction, meal: str = None, date_input: s
             await interaction.followup.send(embed=response)
         else:
             await interaction.followup.send(response)
+
 
 bot.run(BOT_TOKEN)
