@@ -47,9 +47,9 @@ CATEGORY_EMOJIS = {
 BRUH_CATEGORIES = [
     'Al Forno',
     'Leaf Market',
-    'Spoons and Ladles',
     'Hydration',
-    'Sweet Treats',
+    # 'Spoons and Ladles',
+    # 'Sweet Treats',
 ]
 
 POSTED_TRACK_FILE = "already_posted.txt"
@@ -120,7 +120,6 @@ def get_menu(meal_name, date_str, more=False):
     for category in categories:
         if not more and category['name'] in BRUH_CATEGORIES:
             continue
-        # Fetch emoji for category if available
         emoji = CATEGORY_EMOJIS.get(category['name'], '')
         category_name = CATEGORY_ALIASES.get(category['name'], category['name'])
         menu_lines.append(f"{emoji} **{category_name}**")
@@ -153,7 +152,7 @@ async def daily_menu():
     today_str = now.strftime('%Y-%m-%d')
     yesterday_str = (now - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
 
-    if now.hour == 6 and now.minute == 0:
+    if now.hour == 2 and now.minute == 0:
         if not has_already_posted(yesterday_str):
             await post_meals(yesterday_str)
             mark_as_posted(yesterday_str)
@@ -242,5 +241,70 @@ async def force(interaction: discord.Interaction, date_input: str):
         await interaction.response.send_message(f"Forced menu post for {date_str}")
     else:
         await interaction.response.send_message(f"Menu already posted for {date_str}")
+
+@tree.command(name="menu", description="Show the menu for a specified date with optional detailed view")
+async def menu(interaction: discord.Interaction, date_input: str = None, show_more: bool = False):
+    # Acknowledge the interaction immediately
+    await interaction.response.defer()
+
+    eastern = pytz.timezone('US/Eastern')
+    now = datetime.datetime.now(eastern)
+
+    if date_input:
+        match = re.match(r'([a-z]{3,})[- ](\d{1,2})$', date_input.lower().strip())
+        if not match:
+            await interaction.followup.send("Invalid date format. Please use 'oct-24' or 'mar-3'.")
+            return
+
+        month_str, day_str = match.groups()
+        day = int(day_str)
+        try:
+            month = datetime.datetime.strptime(month_str, '%b').month
+        except ValueError:
+            await interaction.followup.send("Invalid month abbreviation.")
+            return
+
+        try:
+            date_this_year = eastern.localize(datetime.datetime(now.year, month, day))
+        except ValueError:
+            await interaction.followup.send("Invalid date.")
+            return
+
+        if date_this_year >= now:
+            date_to_use = date_this_year
+        else:
+            date_to_use = eastern.localize(datetime.datetime(now.year + 1, month, day))
+
+        date_str = date_to_use.strftime('%Y-%m-%d')
+    else:
+        date_str = now.strftime('%Y-%m-%d')
+
+    meals = {
+        'breakfast': BREAKFAST_CHANNEL_ID,
+        'lunch': LUNCH_CHANNEL_ID,
+        'dinner': DINNER_CHANNEL_ID
+    }
+    formatted_date = datetime.datetime.strptime(date_str, '%Y-%m-%d').strftime('%B %d, %Y')
+    accumulated_message = ""
+
+    for meal, channel_id in meals.items():
+        menu = get_menu(meal, date_str, more=show_more)
+        if menu:
+            emoji = EMOJIS.get(meal, '')
+            embed_title = f"{emoji} {meal.capitalize()} Menu for {formatted_date}"
+            accumulated_message += f"**{embed_title}**\n{menu}\n\n"
+        else:
+            accumulated_message += f"No menu available for {meal.capitalize()} on {formatted_date}.\n\n"
+
+    if accumulated_message:
+        embed = discord.Embed(
+            title=f"Menu for {formatted_date}",
+            description=accumulated_message,
+            color=0x1D82B6
+        )
+        await interaction.followup.send(embed=embed)
+    else:
+        await interaction.followup.send(f"No menu data available for {formatted_date}.")
+
 
 bot.run(BOT_TOKEN)
